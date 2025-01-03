@@ -1,0 +1,16 @@
+{
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.espIdfPathWin": "C:\\Users\\dusjc\\esp\\v5.3.2\\esp-idf",
+    "idf.toolsPathWin": "C:\\Users\\dusjc\\.espressif",
+    "idf.portWin": "COM6",
+    "idf.flashType": "UART",
+    "files.associations": {
+        "stdio.h": "c",
+        "ledc.h": "c",
+        "string.h": "c",
+        "freertos.h": "c",
+        "esp_log.h": "c",
+        "pn532drv.h": "c",
+        "task.h": "c"
+    }
+}
