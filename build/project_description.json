@@ -1,7 +1,7 @@
 {
     "version":            "1.1",
     "project_name":       "main",
-    "project_version":    "1",
+    "project_version":    "517ef03-dirty",
     "project_path":       "C:/Users/dusjc/OneDrive/Desktop/CS/Projects/RFID",
     "idf_path":           "C:/Users/dusjc/esp/v5.3.2/esp-idf",
     "build_dir":          "C:/Users/dusjc/OneDrive/Desktop/CS/Projects/RFID/build",
@@ -1180,7 +1180,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "C:/Users/dusjc/OneDrive/Desktop/CS/Projects/RFID/build/esp-idf/main/libmain.a",
-            "sources": [ "C:/Users/dusjc/OneDrive/Desktop/CS/Projects/RFID/main/main.c", "C:/Users/dusjc/OneDrive/Desktop/CS/Projects/RFID/main/Scanner/ScannerApi.c" ],
+            "sources": [ "C:/Users/dusjc/OneDrive/Desktop/CS/Projects/RFID/main/main.c", "C:/Users/dusjc/OneDrive/Desktop/CS/Projects/RFID/main/Scanner/ScannerApi.c", "C:/Users/dusjc/OneDrive/Desktop/CS/Projects/RFID/main/Scanner/PN532Drv.c" ],
             "include_dirs": [ ".", "Common", "Hardware", "Scanner" ]
         },
         "mbedtls": {
