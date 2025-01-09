@@ -25,26 +25,23 @@
 ********************************************************************************
 */
 /* Insert #define here */
-#define SPI_SR                  0x02
-#define SPI_DW                  0x01
-#define SPI_DR                  0x03
-
+#define PN532_DW                0x01
 #define PN532_PREAMBLE          0x00
 #define PN532_STARTCODE1        0x00
 #define PN532_STARTCODE2        0xFF
+#define PN532_TFI               0xD4
 #define PN532_POSTAMBLE         0x00
-#define PN532_HOST_TO_PN532     0xD4
-#define PN532_ACK_FRAME         {0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00}
-#define PN532_NACK_FRAME        {0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00}
 
-#define TAG                     "PN532"
+
+#define TAG                     "pn532"
 /*
 ********************************************************************************
 *                       LOCAL DATA TYPES & STRUCTURES
 ********************************************************************************
 */
 /* Insert local typedef & structure here */
-spi_device_handle_t spi;
+static esp_err_t ret;
+static spi_device_handle_t pn532;
 /*
 ********************************************************************************
 *                       GLOBAL(FILE SCOPE) VARIABLES & TABLES
@@ -75,6 +72,7 @@ static esp_err_t PN532_waitForReady(void);
 ********************************************************************************
 */
 esp_err_t PN532_Init(void) {
+
     // Config for the SPI bus
     spi_bus_config_t buscfg = {
         .miso_io_num = SCANNER_MISO_PIN,
@@ -83,29 +81,46 @@ esp_err_t PN532_Init(void) {
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
     };
+    ret = spi_bus_initialize(SCANNER_HOST, &buscfg, SPI_DMA_DISABLED);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SPI bus initialization failed!");
+        return ret;
+    }
 
-    // Config for the SPI device
+    // Config for adding PN532
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = (1 * 1000 * 1000),
-        .mode = 1,
+        .mode = 0,
         .spics_io_num = SCANNER_SS_PIN,
         .queue_size = 1,
     };
+    ret = spi_bus_add_device(SCANNER_HOST, &devcfg, &pn532);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "PN532 add failed!");
+        return ret;
+    }
 
-    // Config for the RDY pin
+    // Config for the IRQ pin
     gpio_config_t iocfg = {
-        .pin_bit_mask = (1ULL << SCANNER_RDY_PIN),
+        .pin_bit_mask = (1ULL << SCANNER_IRQ_PIN),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE
     };
+    ret = gpio_config(&iocfg);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "PN532 IRQ pin add failed!");
+        return ret;
+    }
 
-    ESP_ERROR_CHECK(spi_bus_initialize(SCANNER_HOST, &buscfg, SPI_DMA_CH_AUTO));
-    ESP_ERROR_CHECK(spi_bus_add_device(SCANNER_HOST, &devcfg, &spi));
-    ESP_ERROR_CHECK(gpio_config(&iocfg));
+    // Resetting hardware
+    gpio_set_level(SCANNER_RSTO_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    gpio_set_level(SCANNER_RSTO_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(100));
 
-    ESP_LOGI(TAG, "PN532 SPI Initialized");
+    ESP_LOGI(TAG, "PN532 initialized!");
     return ESP_OK;
 }
 
@@ -118,24 +133,24 @@ esp_err_t PN532_Init(void) {
 * @remark   Used for sending command to PN532
 ********************************************************************************
 */
-esp_err_t PN532_writeCommand(INT8U *cmd, INT8U cmd_length) {
-    INT8U frame[cmd_length + 8];
+esp_err_t PN532_WriteCommand(INT8U *cmd, INT8U cmd_length) {
+    INT8U frame[cmd_length + 9];
 
     // Start of frame
-    frame[0] = SPI_DW;                                  // Direction Byte
+    frame[0] = PN532_DW;                                // Direction Byte
     frame[1] = PN532_PREAMBLE;                          // Preamble
     frame[2] = PN532_STARTCODE1;                        // Startcode
     frame[3] = PN532_STARTCODE2;
     frame[4] = (cmd_length + 1);                        // Length
     frame[5] = (INT8U)(~frame[4] + 1);                  // Length Checksum
-    frame[6] = PN532_HOST_TO_PN532;                     // Data (including direction byte)
+    frame[6] = PN532_TFI;                               // Data (including direction byte)
     memcpy(&frame[7], cmd, cmd_length);
-    frame[7 + cmd_length] = 0;                          // Data Checksum
-    for (INT8U i = 0; i < cmd_length + 1; i++) {
-        frame[7 + cmd_length] += frame[6 + i];
+    frame[7 + cmd_length] = PN532_TFI;                  // Data Checksum
+    for (INT8U i = 0; i < cmd_length; i++) {
+        frame[7 + cmd_length] += frame[7 + i];
     }
     frame[7 + cmd_length] = (INT8U)(~frame[7 + cmd_length] + 1);
-    frame[8 + cmd_length] = PN532_POSTAMBLE;            // Postsum
+    frame[8 + cmd_length] = PN532_POSTAMBLE;            // Postamble
     // End of frame
 
     return PN532_sendFrame(frame, cmd_length + 9);
@@ -151,8 +166,8 @@ esp_err_t PN532_writeCommand(INT8U *cmd, INT8U cmd_length) {
 * @remark   Used for reading response from PN532
 ********************************************************************************
 */
-esp_err_t PN532_readResponse(INT8U *buf, INT8U buf_length, INT8U *rsp_length) {
-    esp_err_t ret = PN532_waitForReady();
+esp_err_t PN532_ReadResponse(INT8U *buf, INT8U buf_length, INT8U *rsp_length) {
+    ret = PN532_waitForReady();
     if (ret != ESP_OK) return ret;
 
     ret = PN532_receiveFrame(buf, buf_length, rsp_length);
@@ -173,58 +188,69 @@ static esp_err_t PN532_sendFrame(INT8U *frame, INT8U frame_length) {
         .tx_buffer = frame,
         .rx_buffer = NULL,
     };
+    ret = spi_device_transmit(pn532, &transaction);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Sending frame failed!");
+        return ret;
+    }
 
-    return spi_device_transmit(spi, &transaction);
+    return ESP_OK;
 }
 
 static esp_err_t PN532_receiveFrame(INT8U *buf, INT8U buf_length, INT8U *rsp_length) {
+    memset(buf, 0, buf_length);
+
     spi_transaction_t transaction = {               // Transaction sent to ESP32 via SPI
         .length = buf_length * 8,
         .rx_buffer = buf,
         .tx_buffer = NULL,
     };
-
-    esp_err_t ret = spi_device_transmit(spi, &transaction);
-    if (ret == ESP_OK && rsp_length) {
-        *rsp_length = transaction.rxlength / 8;
+    ret = spi_device_transmit(pn532, &transaction);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Receiving frame failed!");
+        return ret;
     }
 
-    return ret;
+    *rsp_length = transaction.rxlength / 8;
+    if (*rsp_length == 0) {
+        ESP_LOGE(TAG, "No data received!");
+    }
+
+    return ESP_OK;
 }
 
 static esp_err_t PN532_validateFrame(INT8U *buf, INT8U length) {
     // Validating frame start
     if (buf[0] != PN532_PREAMBLE || buf[1] != PN532_STARTCODE1 || buf[2] != PN532_STARTCODE2) {
-        ESP_LOGE(TAG, "Invalid frame start");
+        ESP_LOGE(TAG, "Invalid frame start!");
         return ESP_ERR_INVALID_RESPONSE;
     }
 
     // Validating length checksum
     if ((INT8U)(buf[3] + buf[4]) != 0) {
-        ESP_LOGE(TAG, "Invalid length checksum");
+        ESP_LOGE(TAG, "Invalid length checksum!");
         return ESP_ERR_INVALID_CRC;
     }
 
     // Validating data checksum
     INT8U dataChecksum = 0;
     for (INT8U i = 0; i < buf[3]; i++) {
-        dataChecksum = buf[5 + i];
+        dataChecksum += buf[5 + i];
     }
     if ((INT8U)(dataChecksum + buf[5 + buf[3]]) != 0) {
-        ESP_LOGE(TAG, "Invalid data checksum");
+        ESP_LOGE(TAG, "Invalid data checksum!");
         return ESP_ERR_INVALID_CRC;
     }
 
-    ESP_LOGI(TAG, "Frame validation successful");
     return ESP_OK;
 }
 
 static esp_err_t PN532_waitForReady(void) {
     INT32U elapsed_ms = 0;
 
-    while (gpio_get_level(SCANNER_RDY_PIN) == 0) {  // Wait until RDY pin is set
+    while (gpio_get_level(SCANNER_IRQ_PIN) == 1) {  // Wait until IRQ pin is low
         if (elapsed_ms >= 1000) {                   // If timeout
-            ESP_LOGE(TAG, "Timeout waiting for RDY pin");
+            ESP_LOGE(TAG, "Timeout waiting for IRQ pin!");
             return ESP_ERR_TIMEOUT;
         }
         vTaskDelay(pdMS_TO_TICKS(10));

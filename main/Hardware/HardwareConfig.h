@@ -10,14 +10,15 @@
 	
     /** RFID SCANNER */
     #define SCANNER_HOST        VSPI_HOST
-    #define SCANNER_MISO_PIN    GPIO_NUM_1
-    #define SCANNER_SS_PIN      GPIO_NUM_8
-    #define SCANNER_SCK_PIN     GPIO_NUM_9
+    #define SCANNER_SS_PIN      GPIO_NUM_5
+    #define SCANNER_SCK_PIN     GPIO_NUM_18
+    #define SCANNER_MISO_PIN    GPIO_NUM_19
+    #define SCANNER_RSTO_PIN    GPIO_NUM_21
+    #define SCANNER_IRQ_PIN     GPIO_NUM_22
     #define SCANNER_MOSI_PIN    GPIO_NUM_23
-    #define SCANNER_RDY_PIN     GPIO_NUM_22
     
     /** BUZZER */
-    #define BUZZER_PIN          GPIO_NUM_1
+    //#define BUZZER_PIN          GPIO_NUM_21
     
 /*
 *

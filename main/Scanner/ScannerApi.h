@@ -27,5 +27,5 @@
 ********************************************************************************
 */
 /* Insert global function prototypes here */
-
+extern void ScannerInit(void);
 #endif

@@ -16,7 +16,7 @@
 /** @brief Logical data type (TRUE or FALSE)*/
 typedef unsigned char BOOLEAN;
 /** @brief Unsigned 8 bit value*/
-typedef unsigned char INT8U;
+typedef unsigned char INT8U; 
 /** @brief Signed 8 bit value*/
 typedef signed char INT8S;
 /** @brief Volatile Unsigned 8 bit value*/

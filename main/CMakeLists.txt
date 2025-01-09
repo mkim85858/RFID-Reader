@@ -1,4 +1,5 @@
 set(srcs "main.c" 
+    "Hardware/CpuDrv.c"
     "Scanner/ScannerApi.c"
     "Scanner/PN532Drv.c"
     )
