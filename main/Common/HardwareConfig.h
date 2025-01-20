@@ -1,7 +1,5 @@
-#ifndef _CPU_DRV_H
-#define _CPU_DRV_H
-
-#include "Globals.h"
+#ifndef _HARDWARE_CONFIG_H
+#define _HARDWARE_CONFIG_H
 
 /*
 ********************************************************************************
@@ -9,22 +7,40 @@
 ********************************************************************************
 */
 /* Insert #define here */
+	
+    /** RFID SCANNER */
+    #define SCANNER_HOST        VSPI_HOST
+    #define SCANNER_SS_PIN      GPIO_NUM_5
+    #define SCANNER_CLK_PIN     GPIO_NUM_18
+    #define SCANNER_MISO_PIN    GPIO_NUM_19
+    #define SCANNER_IRQ_PIN     GPIO_NUM_21
+    #define SCANNER_RSTO_PIN    GPIO_NUM_22
+    #define SCANNER_MOSI_PIN    GPIO_NUM_23
+    
+    /** BUZZER */
+    #define BUZZER_PIN          GPIO_NUM_4
+    
 /*
+*
 ********************************************************************************
 *                       GLOBAL DATA TYPES & STRUCTURES
 ********************************************************************************
 */
 /* Insert global typedef & struct here */
+
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) VARIABLE EXTERNALS
 ********************************************************************************
 */
 /* Insert global variable externals here */
+
+
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) FUNCTION PROTOTYPES
 ********************************************************************************
 */
 /* Insert global function prototypes here */
-#endif
+
+#endif /* _HARDWARE_CONFIG_H */
