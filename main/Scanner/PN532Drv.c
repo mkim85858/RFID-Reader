@@ -7,12 +7,14 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "esp_log.h"
 #include "PN532Drv.h"
 #include "Common/Globals.h"
 #include "HardwareConfig.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include "rom/ets_sys.h"
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) VARIABLES & TABLES
@@ -42,7 +44,6 @@
 ********************************************************************************
 */
 /* Insert local typedef & structure here */
-static spi_device_handle_t pn532;
 /*
 ********************************************************************************
 *                       GLOBAL(FILE SCOPE) VARIABLES & TABLES
@@ -54,10 +55,9 @@ static spi_device_handle_t pn532;
 *                       LOCAL FUNCTION PROTOTYPES
 ********************************************************************************
 */
-static void PN532_sendFrame(INT8U *frame, INT8U frame_length);
-static void PN532_receiveFrame(INT8U *buf, INT8U buf_length, INT8U *rsp_length);
-static void PN532_waitForIRQ(void);
-static void PN532_waitForRDY(void);
+static void SPI_waitForRDY(void);
+static void SPI_writeByte(INT8U byte);
+static void SPI_readByte(INT8U *byte);
 
 /*
 ********************************************************************************
@@ -74,27 +74,44 @@ static void PN532_waitForRDY(void);
 ********************************************************************************
 */
 void PN532_Init(void) {
-    // Initializing the SPI bus
-    spi_bus_config_t buscfg = {
-        .miso_io_num = SCANNER_MISO_PIN,
-        .mosi_io_num = SCANNER_MOSI_PIN,
-        .sclk_io_num = SCANNER_CLK_PIN,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
+    // Configuring SS pin
+    gpio_config_t sscfg = {
+        .pin_bit_mask = (1ULL << SCANNER_SS_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
     };
-    spi_bus_initialize(SCANNER_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    gpio_config(&sscfg);
+    gpio_set_level(SCANNER_SS_PIN, 1);
 
-    // Adding PN532 to the SPI bus
-    spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = (1 * 1000 * 1000),            // 1MHz
-        .mode = 0,                                      // SPI mode 0
-        .spics_io_num = SCANNER_SS_PIN,
-        .queue_size = 1,
-        .flags = SPI_DEVICE_BIT_LSBFIRST | SPI_DEVICE_HALFDUPLEX,
-        .cs_ena_pretrans = (2 * 1000),                  // 2ms delay before transaction
+    // Configuring CLK pin
+    gpio_config_t clkcfg = {
+        .pin_bit_mask = (1ULL << SCANNER_CLK_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
     };
-    spi_bus_add_device(SCANNER_HOST, &devcfg, &pn532);
-    ESP_LOGI(TAG, "PN532 initialized!");
+    gpio_config(&clkcfg);
+    gpio_set_level(SCANNER_CLK_PIN, 0);
+
+    // Configuring MISO pin
+    gpio_config_t misocfg = {
+        .pin_bit_mask = (1ULL << SCANNER_MISO_PIN),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    };
+    gpio_config(&misocfg);
+    
+    // Configuring MOSI pin
+    gpio_config_t mosicfg = {
+        .pin_bit_mask = (1ULL << SCANNER_MOSI_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    };
+    gpio_config(&mosicfg);
+    gpio_set_level(SCANNER_MOSI_PIN, 0);
 }
 
 /**
@@ -116,7 +133,7 @@ void PN532_WriteCommand(INT8U *cmd, INT8U cmd_length) {
     frame[3] = PN532_STARTCODE2;
     frame[4] = (cmd_length + 1);                        // Length
     frame[5] = (INT8U)(~frame[4] + 1);                  // Length Checksum
-    frame[6] = PN532_TFI;                               // Data (including direction byte)
+    frame[6] = PN532_TFI;                               // Data (including TFI)
     memcpy(&frame[7], cmd, cmd_length);
     frame[7 + cmd_length] = PN532_TFI;                  // Data Checksum
     for (INT8U i = 0; i < cmd_length; i++) {
@@ -126,9 +143,14 @@ void PN532_WriteCommand(INT8U *cmd, INT8U cmd_length) {
     frame[8 + cmd_length] = PN532_POSTAMBLE;            // Postamble
     // End of frame
 
-    PN532_sendFrame(frame, cmd_length + 9);
-
-    ESP_LOGI(TAG, "Command sent!");
+    // Sending frame via SPI
+    gpio_set_level(SCANNER_SS_PIN, 0);
+    ets_delay_us(500);
+    for (int i = 0; i < cmd_length + 9; i++) {
+        SPI_writeByte(frame[i]);
+    }
+    gpio_set_level(SCANNER_SS_PIN, 1);
+    ets_delay_us(500);
 }
 
 /**
@@ -141,20 +163,23 @@ void PN532_WriteCommand(INT8U *cmd, INT8U cmd_length) {
 * @remark   Used for reading a response from PN532
 ********************************************************************************
 */
-void PN532_ReadResponse(INT8U *buf, INT8U buf_length, INT8U *rsp_length) {
-    // Waiting until IRQ pin pulls down
-    //PN532_waitForIRQ();
-    //PN532_waitForRDY();
-    vTaskDelay(pdMS_TO_TICKS(10));
+void PN532_ReadResponse(INT8U *buf, INT8U buf_length) {
+    // Waiting until RDY bit is 0x01
+    gpio_set_level(SCANNER_SS_PIN, 0);
+    ets_delay_us(500);
+    SPI_waitForRDY();
+    gpio_set_level(SCANNER_SS_PIN, 1);
+    ets_delay_us(500);
 
-    // Sending DR byte
-    INT8U dr = PN532_DR;
-    PN532_sendFrame(&dr, 1);
-
-    // Reading data from PN532 and saving in buffer
-    PN532_receiveFrame(buf, buf_length, rsp_length);
-
-    ESP_LOGI(TAG, "Response received!");
+    // Receiving data via SPI
+    gpio_set_level(SCANNER_SS_PIN, 0);
+    ets_delay_us(500);
+    SPI_writeByte(PN532_DR);
+    for (int i = 0; i < buf_length; i++) {
+        SPI_readByte(&buf[i]);
+    }
+    gpio_set_level(SCANNER_SS_PIN, 1);
+    ets_delay_us(500);
 }
 
 /*
@@ -164,61 +189,47 @@ void PN532_ReadResponse(INT8U *buf, INT8U buf_length, INT8U *rsp_length) {
 */
 /* Insert local functions here */
 
-// Sends a frame to the scanner
-static void PN532_sendFrame(INT8U *frame, INT8U frame_length) {
-    spi_transaction_t transaction = {
-        .length = 8 * frame_length,
-        .tx_buffer = frame,
-        .rx_buffer = NULL,
-    };
-    spi_device_transmit(pn532, &transaction);
-}
-
-// Receives a frame from the scanner
-static void PN532_receiveFrame(INT8U *buf, INT8U buf_length, INT8U *rsp_length) {
-    spi_transaction_t transaction = {
-        .length = 0,
-        .tx_buffer = NULL,
-        .rx_buffer = buf,
-        .rxlength = 8 * buf_length,
-    };
-    spi_device_transmit(pn532, &transaction);
-
-    *rsp_length += transaction.rxlength;
-}
-
-// Waits for the scanner to lower the IRQ pin
-static void PN532_waitForIRQ(void) {
-    INT16U elapsed_time = 0;
-
-    while (gpio_get_level(SCANNER_IRQ_PIN) == 0x01) {
-        vTaskDelay(pdMS_TO_TICKS(10));
-        elapsed_time += 10;
-
-        if (elapsed_time > 1000) {
-            ESP_LOGE(TAG, "Timeout waiting for IRQ pin!");
-            break;
-        }
-    }
-}
-
 // Waits for the scanner to send a RDY byte
-static void PN532_waitForRDY(void) {
+static void SPI_waitForRDY(void) {
     INT16U elapsed_time = 0;
-    INT8U SR = PN532_SR;
     INT8U RDY = 0x00;
-    INT8U RDYlen;
-
-    do {
-        PN532_sendFrame(&SR, 1);
-        PN532_receiveFrame(&RDY, 1, &RDYlen);
-
-        vTaskDelay(pdMS_TO_TICKS(10));
-        elapsed_time += 10;
-        if (elapsed_time > 1000) {
-            ESP_LOGE(TAG, "Timeout waiting for RDY byte!");
+    while(1) {
+        SPI_writeByte(PN532_SR);
+        SPI_readByte(&RDY);
+        if (RDY == 0x01 || elapsed_time > 1000) {
             break;
         }
+        ets_delay_us(10000);
+        elapsed_time += 10;
     }
-    while (RDY == 0x00);
+}
+
+// Writes a byte to PN532
+static void SPI_writeByte(INT8U byte) {
+    for (INT8U i = 0; i < 8; i++) {
+        if (byte & (1 << i)) {
+            gpio_set_level(SCANNER_MOSI_PIN, 1);
+        }
+        else {
+            gpio_set_level(SCANNER_MOSI_PIN, 0);
+        }
+        gpio_set_level(SCANNER_CLK_PIN, 1);
+        ets_delay_us(50);
+        gpio_set_level(SCANNER_CLK_PIN, 0);
+        ets_delay_us(50);
+    }
+}
+
+ // Reads a byte from PN532
+static void SPI_readByte(INT8U* byte) {
+    *byte = 0;
+    for (int i = 0; i < 8; i++) {
+        gpio_set_level(SCANNER_CLK_PIN, 1);
+        ets_delay_us(50);
+        if (gpio_get_level(SCANNER_MISO_PIN)) {
+            *byte |= (1 << i);
+        }
+        gpio_set_level(SCANNER_CLK_PIN, 0);
+        ets_delay_us(50);
+    }
 }

@@ -17,7 +17,6 @@
 #include "HardwareConfig.h"
 #include "Scanner/ScannerApi.h"
 #include "Scanner/PN532Drv.h"
-#include "Temp/WithFramework.h"
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) VARIABLES & TABLES
@@ -65,16 +64,22 @@
 void app_main(void) {
     PN532_Init();
 
-    INT8U command[] = {0x14, 0x01, 0x00, 0x01};
-    PN532_WriteCommand(command, 4);
+    // Sending GetFirmwareVersion command
+    INT8U cmd[] = {0x02};
+    PN532_WriteCommand(cmd, 1);
 
-
+    // Receiving ACK frame
     INT8U ack[6];
     memset(ack, 0, 6);
-    INT8U rsplen = 0;
-    PN532_ReadResponse(ack, 6, &rsplen);
+    PN532_ReadResponse(ack, 6);
 
-    // for (int i = 0; i < 6; i ++) {
-    //     ESP_LOGI(TAG, "0x%02x", ack[i]);
-    // }
+    // Receiving response frame
+    INT8U rsp[11];
+    memset(rsp, 0, 11);
+    PN532_ReadResponse(rsp, 11);
+
+    ESP_LOGI(TAG, "IC: %02x", rsp[6]);
+    ESP_LOGI(TAG, "Ver: %02x", rsp[7]);
+    ESP_LOGI(TAG, "Rev: %02x", rsp[8]);
+    ESP_LOGI(TAG, "Support: %02x", rsp[9]);
 }
