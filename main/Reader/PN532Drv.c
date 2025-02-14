@@ -5,15 +5,10 @@
 */
 #include <stdio.h>
 #include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "esp_log.h"
 #include "PN532Drv.h"
-#include "Common/Globals.h"
+#include "Globals.h"
 #include "HardwareConfig.h"
 #include "driver/gpio.h"
-#include "driver/spi_master.h"
 #include "rom/ets_sys.h"
 /*
 ********************************************************************************
@@ -76,27 +71,27 @@ static void SPI_readByte(INT8U *byte);
 void PN532_Init(void) {
     // Configuring SS pin
     gpio_config_t sscfg = {
-        .pin_bit_mask = (1ULL << SCANNER_SS_PIN),
+        .pin_bit_mask = (1ULL << READER_SS_PIN),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
     };
     gpio_config(&sscfg);
-    gpio_set_level(SCANNER_SS_PIN, 1);
+    gpio_set_level(READER_SS_PIN, 1);
 
     // Configuring CLK pin
     gpio_config_t clkcfg = {
-        .pin_bit_mask = (1ULL << SCANNER_CLK_PIN),
+        .pin_bit_mask = (1ULL << READER_CLK_PIN),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
     };
     gpio_config(&clkcfg);
-    gpio_set_level(SCANNER_CLK_PIN, 0);
+    gpio_set_level(READER_CLK_PIN, 0);
 
     // Configuring MISO pin
     gpio_config_t misocfg = {
-        .pin_bit_mask = (1ULL << SCANNER_MISO_PIN),
+        .pin_bit_mask = (1ULL << READER_MISO_PIN),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -105,13 +100,13 @@ void PN532_Init(void) {
     
     // Configuring MOSI pin
     gpio_config_t mosicfg = {
-        .pin_bit_mask = (1ULL << SCANNER_MOSI_PIN),
+        .pin_bit_mask = (1ULL << READER_MOSI_PIN),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
     };
     gpio_config(&mosicfg);
-    gpio_set_level(SCANNER_MOSI_PIN, 0);
+    gpio_set_level(READER_MOSI_PIN, 0);
 }
 
 /**
@@ -144,13 +139,13 @@ void PN532_WriteCommand(INT8U *cmd, INT8U cmd_length) {
     // End of frame
 
     // Sending frame via SPI
-    gpio_set_level(SCANNER_SS_PIN, 0);
-    ets_delay_us(500);
+    gpio_set_level(READER_SS_PIN, 0);
+    ets_delay_us(100);
     for (int i = 0; i < cmd_length + 9; i++) {
         SPI_writeByte(frame[i]);
     }
-    gpio_set_level(SCANNER_SS_PIN, 1);
-    ets_delay_us(500);
+    gpio_set_level(READER_SS_PIN, 1);
+    ets_delay_us(100);
 }
 
 /**
@@ -165,21 +160,21 @@ void PN532_WriteCommand(INT8U *cmd, INT8U cmd_length) {
 */
 void PN532_ReadResponse(INT8U *buf, INT8U buf_length) {
     // Waiting until RDY bit is 0x01
-    gpio_set_level(SCANNER_SS_PIN, 0);
-    ets_delay_us(500);
+    gpio_set_level(READER_SS_PIN, 0);
+    ets_delay_us(100);
     SPI_waitForRDY();
-    gpio_set_level(SCANNER_SS_PIN, 1);
-    ets_delay_us(500);
+    gpio_set_level(READER_SS_PIN, 1);
+    ets_delay_us(100);
 
     // Receiving data via SPI
-    gpio_set_level(SCANNER_SS_PIN, 0);
-    ets_delay_us(500);
+    gpio_set_level(READER_SS_PIN, 0);
+    ets_delay_us(100);
     SPI_writeByte(PN532_DR);
     for (int i = 0; i < buf_length; i++) {
         SPI_readByte(&buf[i]);
     }
-    gpio_set_level(SCANNER_SS_PIN, 1);
-    ets_delay_us(500);
+    gpio_set_level(READER_SS_PIN, 1);
+    ets_delay_us(100);
 }
 
 /*
@@ -189,7 +184,7 @@ void PN532_ReadResponse(INT8U *buf, INT8U buf_length) {
 */
 /* Insert local functions here */
 
-// Waits for the scanner to send a RDY byte
+// Waits for the reader to send a RDY byte
 static void SPI_waitForRDY(void) {
     INT16U elapsed_time = 0;
     INT8U RDY = 0x00;
@@ -206,16 +201,16 @@ static void SPI_waitForRDY(void) {
 
 // Writes a byte to PN532
 static void SPI_writeByte(INT8U byte) {
-    for (INT8U i = 0; i < 8; i++) {
+    for (INT8U i = 0; i < 8; i++) { 
         if (byte & (1 << i)) {
-            gpio_set_level(SCANNER_MOSI_PIN, 1);
+            gpio_set_level(READER_MOSI_PIN, 1);
         }
         else {
-            gpio_set_level(SCANNER_MOSI_PIN, 0);
+            gpio_set_level(READER_MOSI_PIN, 0);
         }
-        gpio_set_level(SCANNER_CLK_PIN, 1);
+        gpio_set_level(READER_CLK_PIN, 1);
         ets_delay_us(50);
-        gpio_set_level(SCANNER_CLK_PIN, 0);
+        gpio_set_level(READER_CLK_PIN, 0);
         ets_delay_us(50);
     }
 }
@@ -224,12 +219,12 @@ static void SPI_writeByte(INT8U byte) {
 static void SPI_readByte(INT8U* byte) {
     *byte = 0;
     for (int i = 0; i < 8; i++) {
-        gpio_set_level(SCANNER_CLK_PIN, 1);
+        gpio_set_level(READER_CLK_PIN, 1);
         ets_delay_us(50);
-        if (gpio_get_level(SCANNER_MISO_PIN)) {
+        if (gpio_get_level(READER_MISO_PIN)) {
             *byte |= (1 << i);
         }
-        gpio_set_level(SCANNER_CLK_PIN, 0);
+        gpio_set_level(READER_CLK_PIN, 0);
         ets_delay_us(50);
     }
 }

@@ -8,14 +8,14 @@
 */
 /* Insert #define here */
 	
-    /** RFID SCANNER */
-    #define SCANNER_HOST        VSPI_HOST
-    #define SCANNER_SS_PIN      GPIO_NUM_5
-    #define SCANNER_CLK_PIN     GPIO_NUM_18
-    #define SCANNER_MISO_PIN    GPIO_NUM_19
-    #define SCANNER_IRQ_PIN     GPIO_NUM_21
-    #define SCANNER_RSTO_PIN    GPIO_NUM_22
-    #define SCANNER_MOSI_PIN    GPIO_NUM_23
+    /** RFID READER */
+    #define READER_HOST        VSPI_HOST
+    #define READER_SS_PIN      GPIO_NUM_5
+    #define READER_CLK_PIN     GPIO_NUM_18
+    #define READER_MISO_PIN    GPIO_NUM_19
+    #define READER_IRQ_PIN     GPIO_NUM_21
+    #define READER_RSTO_PIN    GPIO_NUM_22
+    #define READER_MOSI_PIN    GPIO_NUM_23
     
     /** BUZZER */
     #define BUZZER_PIN          GPIO_NUM_4
@@ -27,7 +27,6 @@
 ********************************************************************************
 */
 /* Insert global typedef & struct here */
-
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) VARIABLE EXTERNALS

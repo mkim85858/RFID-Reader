@@ -1,5 +1,5 @@
-#ifndef _SCANNER_API_H
-#define _SCANNER_API_H
+#ifndef _READER_API_H
+#define _READER_API_H
 
 #include "Globals.h"
 
@@ -27,5 +27,6 @@
 ********************************************************************************
 */
 /* Insert global function prototypes here */
-extern void ScannerInit(void);
+extern void ReaderInit(void);
+//extern void ReaderSendCommand(INT8U *cmd, INT8U cmd_length, INT8U rsp_length);
 #endif
