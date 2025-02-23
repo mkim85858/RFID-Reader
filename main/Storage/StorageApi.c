@@ -5,15 +5,11 @@
 */
 #include <string.h>
 
-#include "rom/ets_sys.h"
+#include "esp_spiffs.h"
+
 #include "Globals.h"
 #include "HardwareConfig.h"
-
-#include "ReaderApi.h"
-#include "PN532Drv.h"
-#include "BuzzerDrv.h"
 #include "StorageApi.h"
-
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) VARIABLES & TABLES
@@ -26,29 +22,26 @@
 ********************************************************************************
 */
 /* Insert #define here */
-#define SAMCONFIG_NORM              {0x14, 0x01, 0x00, 0x00}
-#define RFCONFIG_AUTO               {0x32, 0x01, 0x02}
-#define INAUTOPOLL                  {0x60, 0xFF, 0x05, 0x00}
+#define TAG_LENGTH          14
+#define PATH                "/spiffs/tag_data.bin"
 /*
 ********************************************************************************
 *                       LOCAL DATA TYPES & STRUCTURES
 ********************************************************************************
 */
 /* Insert local typedef & structure here */
-
 /*
 ********************************************************************************
 *                       GLOBAL(FILE SCOPE) VARIABLES & TABLES
 ********************************************************************************
 */
 /* Insert file scope variable & tables here */
-static INT8U rspBuffer[50];
 /*
 ********************************************************************************
 *                       LOCAL FUNCTION PROTOTYPES
 ********************************************************************************
 */
-static void Reader_SendCommand(INT8U *cmd, INT8U cmd_length, INT8U rsp_length);
+
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) FUNCTIONS
@@ -57,43 +50,75 @@ static void Reader_SendCommand(INT8U *cmd, INT8U cmd_length, INT8U rsp_length);
 /* Insert global functions here */
 /**
 ********************************************************************************
-* @brief    Reader Init
+* @brief    Storage Init
 * @param    none
 * @return   none
-* @remark   Initializes reader for reading tags
+* @remark   Used for initializing storage during startup
 ********************************************************************************
 */
-void Reader_Init(void) {
-    PN532_Init();
-    Reader_SendCommand((INT8U[])SAMCONFIG_NORM, 4, 1);
-    Reader_SendCommand((INT8U[])RFCONFIG_AUTO, 3, 1);
-    // add any more config needed during startup
-    memset(rspBuffer, 0, 50);
+void Storage_Init(void) {
+    // initializing spiffs
+    esp_vfs_spiffs_conf_t spiffscfg = {
+        .base_path = "/spiffs",
+        .partition_label = NULL,
+        .max_files = 5,
+        .format_if_mount_failed = true,
+    };
+    esp_vfs_spiffs_register(&spiffscfg);
+
+    // ensuring the file exists
+    FILE *file = fopen(PATH, "rb");
+    if (!file) {
+        file = fopen(PATH, "wb");
+        fclose(file);
+    }
 }
 
 /**
 ********************************************************************************
-* @brief    Reader Poll Tag
-* @param    none
+* @brief    Storage Write
+* @param    tag = tag being stored
 * @return   none
-* @remark   Continuously polls for a tag and checks if it's valid/invalid
+* @remark   Used to write tag data to storage
 ********************************************************************************
 */
-void Reader_PollTag(void) {
-    Reader_SendCommand((INT8U[])INAUTOPOLL, 4, 30);
+void Storage_Write(INT8U* tag) {
+    FILE *file = fopen(PATH, "ab");
+    fwrite(tag, 1, TAG_LENGTH, file);
+    fclose(file);
+}
 
-    // extracting tag information from buffer
-    INT8U tagData[14];
-    memcpy(tagData, rspBuffer + 5, 14);
-    memset(rspBuffer, 0, 50);
+/**
+********************************************************************************
+* @brief    Storage Read
+* @param    tag = tag to compare against
+* @return   valid/invalid
+* @remark   Used to check if tag data is in storage
+********************************************************************************
+*/
+BOOLEAN Storage_Read(INT8U *tag) {
+    FILE *file = fopen(PATH, "rb");
+    INT8U temp[TAG_LENGTH];
 
-    // Checking if tag is already stored in memory or not
-    if (StorageRead(tagData)) {
-        Buzzer_Once();
+    // checking if tag matches
+    while (fread(temp, 1, TAG_LENGTH, file) == TAG_LENGTH) {
+        if (!memcmp(temp, tag, TAG_LENGTH)) {
+            return 1;
+        }
     }
-    else {
-        Buzzer_Twice();
-    }
+    return 0;
+}
+
+/**
+********************************************************************************
+* @brief    Storage Clear
+* @param    none
+* @return   none
+* @remark   Used to clear storage
+********************************************************************************
+*/
+void Storage_Clear(void) {
+    remove(PATH);
 }
 
 /*
@@ -102,20 +127,3 @@ void Reader_PollTag(void) {
 ********************************************************************************
 */
 /* Insert local functions here */
-
-// Sends a command, receives ACK and response
-static void Reader_SendCommand(INT8U *cmd, INT8U cmd_length, INT8U rsp_length) {
-    memset(rspBuffer, 0, 50);
-    PN532_WriteCommand(cmd, cmd_length);            // Sending command
-    PN532_ReadResponse(rspBuffer, 6);               // Receiving ack/nack
-    for (INT8U i = 0; i < 5; i++) {                 // Receiving response
-        PN532_ReadResponse(rspBuffer, rsp_length + 8);
-        if (rspBuffer[1] == 0xFF || rspBuffer[2] == 0xFF) {
-            break;
-        }
-        else {
-            PN532_WriteNACK();
-        }
-    }
-    ets_delay_us(100);
-}

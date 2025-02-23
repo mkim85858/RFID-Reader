@@ -3,19 +3,22 @@
 *                       INCLUDES
 ********************************************************************************
 */
-#include <stdio.h>
 #include <string.h>
-#include "PN532Drv.h"
-#include "Globals.h"
-#include "HardwareConfig.h"
+
 #include "driver/gpio.h"
 #include "rom/ets_sys.h"
+#include "freertos/FreeRTOS.h"
+
+#include "Globals.h"
+#include "HardwareConfig.h"
+#include "PN532Drv.h"
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) VARIABLES & TABLES
 ********************************************************************************
 */
 /* Insert global variables & tables here */
+BOOLEAN stopPolling = false;
 /*
 ********************************************************************************
 *                       LOCAL DEFINITIONS & MACROS
@@ -32,7 +35,8 @@
 #define PN532_TFI               0xD4
 #define PN532_POSTAMBLE         0x00
 
-#define TAG                     "pn532"
+#define ACK                     {0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00}
+#define NACK                    {0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00}
 /*
 ********************************************************************************
 *                       LOCAL DATA TYPES & STRUCTURES
@@ -145,15 +149,36 @@ void PN532_WriteCommand(INT8U *cmd, INT8U cmd_length) {
         SPI_writeByte(frame[i]);
     }
     gpio_set_level(READER_SS_PIN, 1);
-    ets_delay_us(100);
+    ets_delay_us(50);
+}
+
+/**
+********************************************************************************
+* @brief    PN532 write NACK
+* @param    none
+* @return   none
+* @remark   Used for sending a NACK signal to PN532
+********************************************************************************
+*/
+void PN532_WriteNACK(void) {
+    INT8U nack[] = NACK;
+
+    // Sending frame via SPI
+    gpio_set_level(READER_SS_PIN, 0);
+    ets_delay_us(50);
+    for (int i = 0; i < 6; i++) {
+        SPI_writeByte(nack[i]);
+    }
+    gpio_set_level(READER_SS_PIN, 1);
+    ets_delay_us(50);
 }
 
 /**
 ********************************************************************************
 * @brief    PN532 Read Response
 * @param    buf = buffer to hold response
-            buf_length = size of buffer in bytes
-            rsp_length = size of response in bytes
+            buf_length = length of buffer in bytes
+            rsp_length = length of response in bytes
 * @return   none
 * @remark   Used for reading a response from PN532
 ********************************************************************************
@@ -161,20 +186,20 @@ void PN532_WriteCommand(INT8U *cmd, INT8U cmd_length) {
 void PN532_ReadResponse(INT8U *buf, INT8U buf_length) {
     // Waiting until RDY bit is 0x01
     gpio_set_level(READER_SS_PIN, 0);
-    ets_delay_us(100);
+    ets_delay_us(50);
     SPI_waitForRDY();
     gpio_set_level(READER_SS_PIN, 1);
-    ets_delay_us(100);
+    ets_delay_us(50);
 
     // Receiving data via SPI
     gpio_set_level(READER_SS_PIN, 0);
-    ets_delay_us(100);
+    ets_delay_us(50);
     SPI_writeByte(PN532_DR);
     for (int i = 0; i < buf_length; i++) {
         SPI_readByte(&buf[i]);
     }
     gpio_set_level(READER_SS_PIN, 1);
-    ets_delay_us(100);
+    ets_delay_us(50);
 }
 
 /*
@@ -186,16 +211,14 @@ void PN532_ReadResponse(INT8U *buf, INT8U buf_length) {
 
 // Waits for the reader to send a RDY byte
 static void SPI_waitForRDY(void) {
-    INT16U elapsed_time = 0;
     INT8U RDY = 0x00;
     while(1) {
         SPI_writeByte(PN532_SR);
         SPI_readByte(&RDY);
-        if (RDY == 0x01 || elapsed_time > 1000) {
+        if (RDY == 0x01 || stopPolling) {
             break;
         }
-        ets_delay_us(10000);
-        elapsed_time += 10;
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 

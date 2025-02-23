@@ -1,20 +1,16 @@
-/*
+/**
 ********************************************************************************
 *                       INCLUDES
 ********************************************************************************
 */
-/* Insert include files here */
-#include "rom/ets_sys.h"
+#include <stdio.h>
+
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "driver/gpio.h"
 
 #include "Globals.h"
 #include "HardwareConfig.h"
-#include "ReaderApi.h"
-#include "PN532Drv.h"
-#include "BuzzerDrv.h"
-#include "StorageApi.h"
 #include "ButtonDrv.h"
 /*
 ********************************************************************************
@@ -40,47 +36,44 @@
 ********************************************************************************
 */
 /* Insert file scope variable & tables here */
-TaskHandle_t pollTaskHandle = NULL;
 /*
 ********************************************************************************
 *                       LOCAL FUNCTION PROTOTYPES
 ********************************************************************************
 */
 /* Insert static function prototypes here */
-static void pollingTask(void* arg);
-static void buttonInterrupt(void* arg);
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) FUNCTIONS
 ********************************************************************************
 */
 /* Insert global functions here */
+/**
+********************************************************************************
+* @brief    Button Init
+* @param    isr = interrupt service routine to add
+* @return   none
+* @remark   Used for initializing button during startup
+********************************************************************************
+*/
+void Button_Init(gpio_isr_t isr) {
+    // Configuring button pin
+    gpio_config_t buttoncfg = {
+        .pin_bit_mask = (1ULL << BUTTON_PIN),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_POSEDGE,
+    };
+    gpio_config(&buttoncfg);
+
+    // Initializing interrupts
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(BUTTON_PIN, isr, (void*) BUTTON_PIN);
+}
 /*
 ********************************************************************************
 *                       LOCAL FUNCTIONS
 ********************************************************************************
 */
 /* Insert local functions here */
-
-void app_main(void) {
-    Reader_Init();
-    Buzzer_Init();
-    Storage_Init();
-    Button_Init(buttonInterrupt);
-    xTaskCreate(pollingTask, "polling tag", 4096, NULL, 5, &pollTaskHandle);
-}
-
-// Task that continuously polls for a tag
-void pollingTask(void *arg) {
-    while(1) {
-        stopPolling = false;
-        ReaderPollTag();
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
-}
-
-// Interrupt for when the button is pressed
-void buttonInterrupt(void *arg) {
-    stopPolling = true;
-    xTaskNotifyFromISR(pollTaskHandle, 0, eNoAction, NULL);
-}

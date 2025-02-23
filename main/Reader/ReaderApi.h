@@ -27,6 +27,6 @@
 ********************************************************************************
 */
 /* Insert global function prototypes here */
-extern void ReaderInit(void);
-//extern void ReaderSendCommand(INT8U *cmd, INT8U cmd_length, INT8U rsp_length);
+extern void Reader_Init(void);
+extern void Reader_PollTag(void);
 #endif

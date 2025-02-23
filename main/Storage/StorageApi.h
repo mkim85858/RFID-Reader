@@ -1,5 +1,5 @@
-#ifndef _PN532_DRV_H
-#define _PN532_DRV_H
+#ifndef _STORAGE_DRV_H
+#define _STORAGE_DRV_H
 
 #include "Globals.h"
 
@@ -21,16 +21,15 @@
 ********************************************************************************
 */
 /* Insert global variable externals here */
-extern BOOLEAN stopPolling;
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) FUNCTION PROTOTYPES
 ********************************************************************************
 */
 /* Insert global function prototypes here */
-extern void PN532_Init(void);
-extern void PN532_WriteCommand(INT8U *cmd, INT8U cmd_length);
-extern void PN532_WriteNACK(void);
-extern void PN532_ReadResponse(INT8U *buf, INT8U buf_length);
+extern void Storage_Init(void);
+extern void Storage_Write(INT8U *tag);
+extern BOOLEAN Storage_Read(INT8U *tag);
+extern void Storage_Clear(void);
 
 #endif

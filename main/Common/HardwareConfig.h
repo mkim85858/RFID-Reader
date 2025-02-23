@@ -12,13 +12,14 @@
     #define READER_HOST        VSPI_HOST
     #define READER_SS_PIN      GPIO_NUM_5
     #define READER_CLK_PIN     GPIO_NUM_18
-    #define READER_MISO_PIN    GPIO_NUM_19
-    #define READER_IRQ_PIN     GPIO_NUM_21
-    #define READER_RSTO_PIN    GPIO_NUM_22
+    #define READER_MISO_PIN    GPIO_NUM_19  
     #define READER_MOSI_PIN    GPIO_NUM_23
     
     /** BUZZER */
-    #define BUZZER_PIN          GPIO_NUM_4
+    #define BUZZER_PIN          GPIO_NUM_22
+
+    /** BUTTON */
+    #define BUTTON_PIN          GPIO_NUM_4 // will change
     
 /*
 *

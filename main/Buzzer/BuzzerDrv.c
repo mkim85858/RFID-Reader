@@ -3,17 +3,13 @@
 *                       INCLUDES
 ********************************************************************************
 */
-#include <string.h>
-
+#include "driver/gpio.h"
 #include "rom/ets_sys.h"
+#include "freertos/FreeRTOS.h"
+
 #include "Globals.h"
 #include "HardwareConfig.h"
-
-#include "ReaderApi.h"
-#include "PN532Drv.h"
 #include "BuzzerDrv.h"
-#include "StorageApi.h"
-
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) VARIABLES & TABLES
@@ -26,29 +22,24 @@
 ********************************************************************************
 */
 /* Insert #define here */
-#define SAMCONFIG_NORM              {0x14, 0x01, 0x00, 0x00}
-#define RFCONFIG_AUTO               {0x32, 0x01, 0x02}
-#define INAUTOPOLL                  {0x60, 0xFF, 0x05, 0x00}
 /*
 ********************************************************************************
 *                       LOCAL DATA TYPES & STRUCTURES
 ********************************************************************************
 */
 /* Insert local typedef & structure here */
-
 /*
 ********************************************************************************
 *                       GLOBAL(FILE SCOPE) VARIABLES & TABLES
 ********************************************************************************
 */
 /* Insert file scope variable & tables here */
-static INT8U rspBuffer[50];
 /*
 ********************************************************************************
 *                       LOCAL FUNCTION PROTOTYPES
 ********************************************************************************
 */
-static void Reader_SendCommand(INT8U *cmd, INT8U cmd_length, INT8U rsp_length);
+
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) FUNCTIONS
@@ -57,65 +48,58 @@ static void Reader_SendCommand(INT8U *cmd, INT8U cmd_length, INT8U rsp_length);
 /* Insert global functions here */
 /**
 ********************************************************************************
-* @brief    Reader Init
+* @brief    Buzzer Init
 * @param    none
 * @return   none
-* @remark   Initializes reader for reading tags
+* @remark   Used for initializing buzzer during startup
 ********************************************************************************
 */
-void Reader_Init(void) {
-    PN532_Init();
-    Reader_SendCommand((INT8U[])SAMCONFIG_NORM, 4, 1);
-    Reader_SendCommand((INT8U[])RFCONFIG_AUTO, 3, 1);
-    // add any more config needed during startup
-    memset(rspBuffer, 0, 50);
+void Buzzer_Init(void) {
+    // Configuring buzzer pin
+    gpio_config_t buzzercfg = {
+        .pin_bit_mask = (1ULL << BUZZER_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    };
+    gpio_config(&buzzercfg);
+    gpio_set_level(BUZZER_PIN, 0);
 }
 
 /**
 ********************************************************************************
-* @brief    Reader Poll Tag
+* @brief    Buzz Once
 * @param    none
 * @return   none
-* @remark   Continuously polls for a tag and checks if it's valid/invalid
+* @remark   Used to indicate a valid tag
 ********************************************************************************
 */
-void Reader_PollTag(void) {
-    Reader_SendCommand((INT8U[])INAUTOPOLL, 4, 30);
-
-    // extracting tag information from buffer
-    INT8U tagData[14];
-    memcpy(tagData, rspBuffer + 5, 14);
-    memset(rspBuffer, 0, 50);
-
-    // Checking if tag is already stored in memory or not
-    if (StorageRead(tagData)) {
-        Buzzer_Once();
-    }
-    else {
-        Buzzer_Twice();
-    }
+void Buzzer_Once(void) {
+    gpio_set_level(BUZZER_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_set_level(BUZZER_PIN, 0);
 }
 
+/**
+********************************************************************************
+* @brief    Buzz Twice
+* @param    none
+* @return   none
+* @remark   Used to indicate an invalid tag
+********************************************************************************
+*/
+void Buzzer_Twice(void) {
+    gpio_set_level(BUZZER_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_set_level(BUZZER_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_set_level(BUZZER_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_set_level(BUZZER_PIN, 0);
+}
 /*
 ********************************************************************************
 *                       LOCAL FUNCTIONS
 ********************************************************************************
 */
 /* Insert local functions here */
-
-// Sends a command, receives ACK and response
-static void Reader_SendCommand(INT8U *cmd, INT8U cmd_length, INT8U rsp_length) {
-    memset(rspBuffer, 0, 50);
-    PN532_WriteCommand(cmd, cmd_length);            // Sending command
-    PN532_ReadResponse(rspBuffer, 6);               // Receiving ack/nack
-    for (INT8U i = 0; i < 5; i++) {                 // Receiving response
-        PN532_ReadResponse(rspBuffer, rsp_length + 8);
-        if (rspBuffer[1] == 0xFF || rspBuffer[2] == 0xFF) {
-            break;
-        }
-        else {
-            PN532_WriteNACK();
-        }
-    }
-    ets_delay_us(100);
-}
