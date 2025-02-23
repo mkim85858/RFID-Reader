@@ -33,6 +33,8 @@ typedef unsigned long INT32U;
 typedef signed long INT32S;
 /** @brief Volatile Unsigned 32 bit value*/
 typedef volatile unsigned long VINT32U;
+/** @brief Unsigned 64 bit value*/
+typedef unsigned long long INT64U;
 /** @brief 32 bit, single prec. floating-point*/
 typedef float FP32;
 /** @brief 64 bit, double prec. floating-point*/

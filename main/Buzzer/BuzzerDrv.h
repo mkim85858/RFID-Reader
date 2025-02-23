@@ -28,7 +28,7 @@
 */
 /* Insert global function prototypes here */
 extern void Buzzer_Init(void);
-extern void Buzz_Once(void);
-extern void Buzz_Twice(void);
+extern void Buzzer_Once(void);
+extern void Buzzer_Twice(void);
 
 #endif

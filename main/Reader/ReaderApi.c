@@ -88,7 +88,33 @@ void Reader_PollTag(void) {
     memset(rspBuffer, 0, 50);
 
     // Checking if tag is already stored in memory or not
-    if (StorageRead(tagData)) {
+    if (Storage_Read(tagData)) {
+        Buzzer_Once();
+    }
+    else {
+        Buzzer_Twice();
+    }
+}
+
+/**
+********************************************************************************
+* @brief    Reader Save Tag
+* @param    none
+* @return   none
+* @remark   Continuously polls for a tag and saves it to memory
+********************************************************************************
+*/
+void Reader_SaveTag(void) {
+    Reader_SendCommand((INT8U[])INAUTOPOLL, 4, 30);
+
+    // extracting tag information from buffer
+    INT8U tagData[14];
+    memcpy(tagData, rspBuffer + 5, 14);
+    memset(rspBuffer, 0, 50);
+
+    // If tag is not already stored, write to memory
+    if (Storage_Read(tagData) == 0) {
+        Storage_Write(tagData);
         Buzzer_Once();
     }
     else {

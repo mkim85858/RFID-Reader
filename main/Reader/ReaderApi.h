@@ -29,4 +29,5 @@
 /* Insert global function prototypes here */
 extern void Reader_Init(void);
 extern void Reader_PollTag(void);
+extern void Reader_SaveTag(void);
 #endif
