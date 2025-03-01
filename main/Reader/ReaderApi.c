@@ -88,11 +88,8 @@ void Reader_PollTag(void) {
     memset(rspBuffer, 0, 50);
 
     // Checking if tag is already stored in memory or not
-    if (Storage_Read(tagData)) {
-        Buzzer_Once();
-    }
-    else {
-        Buzzer_Twice();
+    if (stopPolling == false) {
+        Storage_Read(tagData);
     }
 }
 
@@ -115,10 +112,6 @@ void Reader_SaveTag(void) {
     // If tag is not already stored, write to memory
     if (Storage_Read(tagData) == 0) {
         Storage_Write(tagData);
-        Buzzer_Once();
-    }
-    else {
-        Buzzer_Twice();
     }
 }
 
@@ -136,12 +129,12 @@ static void Reader_SendCommand(INT8U *cmd, INT8U cmd_length, INT8U rsp_length) {
     PN532_ReadResponse(rspBuffer, 6);               // Receiving ack/nack
     for (INT8U i = 0; i < 5; i++) {                 // Receiving response
         PN532_ReadResponse(rspBuffer, rsp_length + 8);
-        if (rspBuffer[1] == 0xFF || rspBuffer[2] == 0xFF) {
+        if (rspBuffer[1] == 0xFF || rspBuffer[2] == 0xFF || stopPolling) {
             break;
         }
         else {
             PN532_WriteNACK();
         }
     }
-    ets_delay_us(100);
+    ets_delay_us(50);
 }

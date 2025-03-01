@@ -6,11 +6,11 @@
 #include <string.h>
 
 #include "esp_spiffs.h"
-#include "esp_log.h"
 
 #include "Globals.h"
 #include "HardwareConfig.h"
 #include "StorageApi.h"
+#include "BuzzerDrv.h"
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) VARIABLES & TABLES
@@ -66,13 +66,9 @@ void Storage_Init(void) {
         .format_if_mount_failed = true,
     };
     esp_vfs_spiffs_register(&spiffscfg);
-
     // ensuring the file exists
-    FILE *file = fopen(PATH, "rb");
-    if (!file) {
-        file = fopen(PATH, "wb");
-        fclose(file);
-    }
+    FILE* temp = fopen(PATH, "wb");
+    fclose(temp);
 }
 
 /**
@@ -94,7 +90,8 @@ void Storage_Write(INT8U* tag) {
 ********************************************************************************
 * @brief    Storage Read
 * @param    tag = tag to compare against
-* @return   valid/invalid
+* @return   1 = valid
+            0 = invalid
 * @remark   Used to check if tag data is in storage
 ********************************************************************************
 */
@@ -103,11 +100,15 @@ BOOLEAN Storage_Read(INT8U *tag) {
     INT8U temp[TAG_LENGTH];
 
     // checking if tag matches
-    while (fread(temp, TAG_LENGTH, 1, file) == TAG_LENGTH) {
+    while (fread(temp, 1, TAG_LENGTH, file) > 0) {
         if (!memcmp(temp, tag, TAG_LENGTH)) {
+            fclose(file);
+            Buzzer_Once();
             return 1;
         }
     }
+    fclose(file);
+    Buzzer_Twice();
     return 0;
 }
 
@@ -121,6 +122,7 @@ BOOLEAN Storage_Read(INT8U *tag) {
 */
 void Storage_Clear(void) {
     remove(PATH);
+    Buzzer_Long();
 }
 
 /*

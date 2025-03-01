@@ -10,7 +10,6 @@
 #include "freertos/semphr.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
-#include "esp_log.h"
 
 #include "Globals.h"
 #include "HardwareConfig.h"
@@ -83,8 +82,6 @@ void app_main(void) {
 void pollingTask(void *arg) {
     while(1) {
         if (stopPolling == false) {
-            
-            // Poll for next tag. Save the tag in memory if saveTag is set
             if (saveTag == false) {
                 Reader_PollTag();
             }
@@ -113,11 +110,11 @@ void buttonTask(void* arg) {
                 // if button was held for over 2 seconds, clear memory
                 if (pressedTime > 2000000) {
                     Storage_Clear();
-                    Buzzer_Long();
                 }
                 // if button was not held, save next tag
                 else {
                     saveTag = true;
+                    vTaskDelay(pdMS_TO_TICKS(10));
                 }
                 stopPolling = false;
             }

@@ -76,7 +76,7 @@ void Buzzer_Init(void) {
 */
 void Buzzer_Once(void) {
     gpio_set_level(BUZZER_PIN, 1);
-    vTaskDelay(pdMS_TO_TICKS(75));
+    vTaskDelay(pdMS_TO_TICKS(85));
     gpio_set_level(BUZZER_PIN, 0);
 }
 
