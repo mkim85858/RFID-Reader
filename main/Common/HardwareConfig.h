@@ -9,7 +9,6 @@
 /* Insert #define here */
 	
     /** RFID READER */
-    #define READER_HOST        VSPI_HOST
     #define READER_SS_PIN      GPIO_NUM_5
     #define READER_CLK_PIN     GPIO_NUM_18
     #define READER_MISO_PIN    GPIO_NUM_19  
@@ -19,7 +18,7 @@
     #define BUZZER_PIN          GPIO_NUM_22
 
     /** BUTTON */
-    #define BUTTON_PIN          GPIO_NUM_4 // will change
+    #define BUTTON_PIN          GPIO_NUM_4
     
 /*
 *

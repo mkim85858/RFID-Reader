@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "esp_spiffs.h"
+#include "esp_log.h"
 
 #include "Globals.h"
 #include "HardwareConfig.h"
@@ -84,6 +85,7 @@ void Storage_Init(void) {
 */
 void Storage_Write(INT8U* tag) {
     FILE *file = fopen(PATH, "ab");
+    
     fwrite(tag, 1, TAG_LENGTH, file);
     fclose(file);
 }
@@ -101,7 +103,7 @@ BOOLEAN Storage_Read(INT8U *tag) {
     INT8U temp[TAG_LENGTH];
 
     // checking if tag matches
-    while (fread(temp, 1, TAG_LENGTH, file) == TAG_LENGTH) {
+    while (fread(temp, TAG_LENGTH, 1, file) == TAG_LENGTH) {
         if (!memcmp(temp, tag, TAG_LENGTH)) {
             return 1;
         }

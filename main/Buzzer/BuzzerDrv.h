@@ -30,5 +30,5 @@
 extern void Buzzer_Init(void);
 extern void Buzzer_Once(void);
 extern void Buzzer_Twice(void);
-
+extern void Buzzer_Long(void);
 #endif

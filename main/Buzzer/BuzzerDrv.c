@@ -76,7 +76,7 @@ void Buzzer_Init(void) {
 */
 void Buzzer_Once(void) {
     gpio_set_level(BUZZER_PIN, 1);
-    vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(75));
     gpio_set_level(BUZZER_PIN, 0);
 }
 
@@ -95,6 +95,20 @@ void Buzzer_Twice(void) {
     vTaskDelay(pdMS_TO_TICKS(50));
     gpio_set_level(BUZZER_PIN, 1);
     vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_set_level(BUZZER_PIN, 0);
+}
+
+/**
+********************************************************************************
+* @brief    Buzz Long
+* @param    none
+* @return   none
+* @remark   Used to indicate the memory has been cleared
+********************************************************************************
+*/
+void Buzzer_Long(void) {
+    gpio_set_level(BUZZER_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(150));
     gpio_set_level(BUZZER_PIN, 0);
 }
 /*
