@@ -69,13 +69,13 @@ static void buttonInterrupt(void* arg);
 
 void app_main(void) {
     Reader_Init();
-    Buzzer_Init();
-    Storage_Init();
-    Button_Init(buttonInterrupt);
-    semaphoreHandle = xSemaphoreCreateBinary();
+    //Buzzer_Init();
+    //Storage_Init();
+    //Button_Init(buttonInterrupt);
+    //semaphoreHandle = xSemaphoreCreateBinary();
 
-    xTaskCreate(pollingTask, "polling tag", 4096, NULL, 2, NULL);
-    xTaskCreate(buttonTask, "button pressed", 2048, NULL, 3, NULL);
+    //xTaskCreate(pollingTask, "polling tag", 4096, NULL, 2, NULL);
+    //xTaskCreate(buttonTask, "button pressed", 2048, NULL, 3, NULL);
 }
 
 // Task that continuously polls for a tag
@@ -94,7 +94,7 @@ void pollingTask(void *arg) {
     }
 }
 
-// Task that 
+// Task that handles button presses
 void buttonTask(void* arg) {
     while (1) {
         if (xSemaphoreTake(semaphoreHandle, portMAX_DELAY) == pdTRUE) {

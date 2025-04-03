@@ -13,7 +13,6 @@
 #include "PN532Drv.h"
 #include "BuzzerDrv.h"
 #include "StorageApi.h"
-
 /*
 ********************************************************************************
 *                       GLOBAL(EXPORTED) VARIABLES & TABLES
@@ -26,6 +25,7 @@
 ********************************************************************************
 */
 /* Insert #define here */
+#define GETFIRMWAREVERSION          {0x02}
 #define SAMCONFIG_NORM              {0x14, 0x01, 0x00, 0x00}
 #define RFCONFIG_AUTO               {0x32, 0x01, 0x02}
 #define INAUTOPOLL                  {0x60, 0xFF, 0x05, 0x00}
@@ -65,8 +65,10 @@ static void Reader_SendCommand(INT8U *cmd, INT8U cmd_length, INT8U rsp_length);
 */
 void Reader_Init(void) {
     PN532_Init();
-    Reader_SendCommand((INT8U[])SAMCONFIG_NORM, 4, 1);
-    Reader_SendCommand((INT8U[])RFCONFIG_AUTO, 3, 1);
+
+    Reader_SendCommand((INT8U[])GETFIRMWAREVERSION, 1, 5);
+    //Reader_SendCommand((INT8U[])SAMCONFIG_NORM, 4, 1);
+    //Reader_SendCommand((INT8U[])RFCONFIG_AUTO, 3, 1);
     // add any more config needed during startup
     memset(rspBuffer, 0, 50);
 }

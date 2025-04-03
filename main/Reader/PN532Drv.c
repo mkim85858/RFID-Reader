@@ -8,6 +8,7 @@
 #include "driver/gpio.h"
 #include "rom/ets_sys.h"
 #include "freertos/FreeRTOS.h"
+#include "driver/spi_master.h"
 
 #include "Globals.h"
 #include "HardwareConfig.h"
@@ -49,14 +50,15 @@ BOOLEAN stopPolling = false;
 ********************************************************************************
 */
 /* Insert file scope variable & tables here */
+static spi_device_handle_t spi_handle;
 /*
 ********************************************************************************
 *                       LOCAL FUNCTION PROTOTYPES
 ********************************************************************************
 */
 static void SPI_waitForRDY(void);
-static void SPI_writeByte(INT8U byte);
-static void SPI_readByte(INT8U *byte);
+static void SPI_write(INT8U *data, INT8U data_length);
+static void SPI_writeRead(INT8U *data, INT8U data_length, INT8U *rsp, INT8U rsp_length);
 
 /*
 ********************************************************************************
@@ -73,44 +75,37 @@ static void SPI_readByte(INT8U *byte);
 ********************************************************************************
 */
 void PN532_Init(void) {
-    // Configuring SS pin
-    gpio_config_t sscfg = {
+    spi_bus_config_t spicfg = {
+        .miso_io_num = READER_MISO_PIN,
+        .mosi_io_num = READER_MOSI_PIN,
+        .sclk_io_num = READER_CLK_PIN,
+        .quadhd_io_num = -1,
+        .quadwp_io_num = -1,
+        .max_transfer_sz = 4096,
+    };
+
+    spi_device_interface_config_t devcfg = {
+        .clock_speed_hz = 1 * 1000 * 1000,
+        .mode = 0,
+        .spics_io_num = -1,
+        .queue_size = 1,
+        .flags = SPI_DEVICE_BIT_LSBFIRST | SPI_DEVICE_HALFDUPLEX,
+    };
+
+    gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << READER_SS_PIN),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
     };
-    gpio_config(&sscfg);
+
+    spi_bus_initialize(SPI2_HOST, &spicfg, SPI_DMA_CH_AUTO);
+    spi_bus_add_device(SPI2_HOST, &devcfg, &spi_handle);
+    gpio_config(&io_conf);
+
     gpio_set_level(READER_SS_PIN, 1);
-
-    // Configuring CLK pin
-    gpio_config_t clkcfg = {
-        .pin_bit_mask = (1ULL << READER_CLK_PIN),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    };
-    gpio_config(&clkcfg);
-    gpio_set_level(READER_CLK_PIN, 0);
-
-    // Configuring MISO pin
-    gpio_config_t misocfg = {
-        .pin_bit_mask = (1ULL << READER_MISO_PIN),
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    };
-    gpio_config(&misocfg);
-    
-    // Configuring MOSI pin
-    gpio_config_t mosicfg = {
-        .pin_bit_mask = (1ULL << READER_MOSI_PIN),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    };
-    gpio_config(&mosicfg);
-    gpio_set_level(READER_MOSI_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
 }
 
 /**
@@ -143,34 +138,20 @@ void PN532_WriteCommand(INT8U *cmd, INT8U cmd_length) {
     // End of frame
 
     // Sending frame via SPI
-    gpio_set_level(READER_SS_PIN, 0);
-    ets_delay_us(100);
-    for (int i = 0; i < cmd_length + 9; i++) {
-        SPI_writeByte(frame[i]);
-    }
-    gpio_set_level(READER_SS_PIN, 1);
-    ets_delay_us(50);
+    SPI_write(frame, cmd_length + 9);
 }
 
 /**
 ********************************************************************************
-* @brief    PN532 write NACK
+* @brief    PN532 Write NACK
 * @param    none
 * @return   none
-* @remark   Used for sending a NACK signal to PN532
+* @remark   Used for sending a NACK frame to PN532
 ********************************************************************************
 */
 void PN532_WriteNACK(void) {
     INT8U nack[] = NACK;
-
-    // Sending frame via SPI
-    gpio_set_level(READER_SS_PIN, 0);
-    ets_delay_us(50);
-    for (int i = 0; i < 6; i++) {
-        SPI_writeByte(nack[i]);
-    }
-    gpio_set_level(READER_SS_PIN, 1);
-    ets_delay_us(50);
+    SPI_write(nack, 6);
 }
 
 /**
@@ -185,21 +166,11 @@ void PN532_WriteNACK(void) {
 */
 void PN532_ReadResponse(INT8U *buf, INT8U buf_length) {
     // Waiting until RDY bit is 0x01
-    gpio_set_level(READER_SS_PIN, 0);
-    ets_delay_us(50);
     SPI_waitForRDY();
-    gpio_set_level(READER_SS_PIN, 1);
-    ets_delay_us(50);
 
     // Receiving data via SPI
-    gpio_set_level(READER_SS_PIN, 0);
-    ets_delay_us(50);
-    SPI_writeByte(PN532_DR);
-    for (int i = 0; i < buf_length; i++) {
-        SPI_readByte(&buf[i]);
-    }
-    gpio_set_level(READER_SS_PIN, 1);
-    ets_delay_us(50);
+    INT8U DR = PN532_DR;
+    SPI_writeRead(&DR, 1, buf, buf_length);
 }
 
 /*
@@ -211,10 +182,10 @@ void PN532_ReadResponse(INT8U *buf, INT8U buf_length) {
 
 // Waits for the reader to send a RDY byte
 static void SPI_waitForRDY(void) {
+    INT8U SR = PN532_SR;
     INT8U RDY = 0x00;
     while(1) {
-        SPI_writeByte(PN532_SR);
-        SPI_readByte(&RDY);
+        SPI_writeRead(&SR, 1, &RDY, 1);
         if (RDY == 0x01 || stopPolling) {
             break;
         }
@@ -222,32 +193,39 @@ static void SPI_waitForRDY(void) {
     }
 }
 
-// Writes a byte to PN532
-static void SPI_writeByte(INT8U byte) {
-    for (INT8U i = 0; i < 8; i++) { 
-        if (byte & (1 << i)) {
-            gpio_set_level(READER_MOSI_PIN, 1);
-        }
-        else {
-            gpio_set_level(READER_MOSI_PIN, 0);
-        }
-        gpio_set_level(READER_CLK_PIN, 1);
-        ets_delay_us(50);
-        gpio_set_level(READER_CLK_PIN, 0);
-        ets_delay_us(50);
-    }
+// Writes data to PN532
+static void SPI_write(INT8U *data, INT8U data_length) {
+    spi_transaction_t t;
+    memset(&t, 0, sizeof(t));
+    t.length = data_length * 8;
+    t.tx_buffer = data;
+
+    gpio_set_level(READER_SS_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(1));
+    spi_device_transmit(spi_handle, &t);
+    gpio_set_level(READER_SS_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(1));
 }
 
- // Reads a byte from PN532
-static void SPI_readByte(INT8U* byte) {
-    *byte = 0;
-    for (int i = 0; i < 8; i++) {
-        gpio_set_level(READER_CLK_PIN, 1);
-        ets_delay_us(50);
-        if (gpio_get_level(READER_MISO_PIN)) {
-            *byte |= (1 << i);
-        }
-        gpio_set_level(READER_CLK_PIN, 0);
-        ets_delay_us(50);
-    }
+// Writes data to PN532 and receives response
+static void SPI_writeRead(INT8U *data, INT8U data_length, INT8U *rsp, INT8U rsp_length) {
+    spi_transaction_t t;
+
+    memset(&t, 0, sizeof(t));
+    t.length = data_length * 8;
+    t.tx_buffer = data;
+    gpio_set_level(READER_SS_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(1));
+    spi_device_transmit(spi_handle, &t);
+    gpio_set_level(READER_SS_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(1));
+
+    memset(&t, 0, sizeof(t));
+    t.rxlength = rsp_length * 8;
+    t.rx_buffer = rsp;
+    gpio_set_level(READER_SS_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(1));
+    spi_device_transmit(spi_handle, &t);
+    gpio_set_level(READER_SS_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(1));
 }
